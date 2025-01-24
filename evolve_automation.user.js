@@ -831,6 +831,9 @@
             this.cost = {};
             this.overridePowered = undefined;
 
+            this.base_creep = this.is.base_creep ? this.is.base_creep : {};
+            this.creep = {};
+
             this.is = normalizeProperties(flags) ?? {};
         }
 
@@ -967,6 +970,79 @@
             return this.isUnlocked() && this.isAffordable() && this.count < this.gameMax;
         }
 
+        updateCreep() {
+            // console.log("creep update", this.base_creep)
+            for (let res in this.base_creep) {
+                // console.log("creep update", res)
+                let creep = this.base_creep[res]
+                // console.log("creep update", creep)
+                if (game.global.race.universe === "micro") {
+                    let de = resources.Dark.currentQuantity * (1 + resources.Harmony.currentQuantity * 0.01);
+                    if (this._tab === "city") {
+                        de = 0.02 + (Math.log(100 + de) - 4.605170185988092) / 20;
+                        de *= 1 + (getAchievementStar("extinct_sludge", "micro") * 0.03);
+                        if (de > 0.06) {
+                            de = 0.06;
+                        }
+                    }
+                    else {
+                        de = 0.01 + (Math.log(100 + de) - 4.605170185988092) / 35;
+                        de *= 1 + (getAchievementStar("extinct_sludge", "micro") * 0.03);
+                        if (de > 0.04) {
+                            de = 0.04;
+                        }
+                    }
+                    creep -= de;
+                }
+
+                if (this._tab === "city") {
+                    creep -= traitVal("small", 0);
+                    creep += traitVal("large", 0);
+                    creep -= traitVal("compact", 0);
+                }
+                else {
+                    creep -= traitVal("small", 1);
+                    creep -= traitVal("compact", 1);
+                }
+                if (this.id === 'mine' || this.id === 'coal_mine') {
+                    creep -= traitVal("tunneler", 0);
+                }
+                if (game.global.tech["housing_reduction"] && (this.id === 'basic_housing' || this.id === 'cottage')) {
+                    creep -= game.global.tech['housing_reduction'] * 0.02;
+                }
+                if (game.global.tech["housing_reduction"] && this.id === 'captive_housing') {
+                    creep -= game.global.tech['housing_reduction'] * 0.01;
+                }
+                if (this.id === 'basic_housing') {
+                    creep -= traitVal("solitary", 0);
+                    creep += traitVal("pack_mentality", 0);
+                }
+                if (this.id === 'cottage') {
+                    creep += traitVal("solitary", 1);
+                    creep -= traitVal("pack_mentality", 1);
+                }
+                if (this.id === 'apartment') {
+                    creep -= traitVal("pack_mentality", 1);
+                }
+                let crispr_creep = game.global.genes.creep / 100
+                if (game.global.race.no_crispr) {
+                    crispr_creep /= 5;
+                }
+                creep -= crispr_creep;
+                if (getGovernor() === 'criminal') {
+                    creep -= 0.005;
+                }
+                // console.log("creep update", creep)
+                if (creep < 1.005) {
+                    creep = 1.005;
+                }
+
+                creep = parseFloat(creep.toFixed(5))
+
+                this.creep[res] = creep;
+            }
+        }
+
         // This is a "safe" click. It will only click if the container is currently clickable.
         // ie. it won't bypass the interface and click the node if it isn't clickable in the UI.
         click() {
@@ -974,20 +1050,83 @@
                 return false
             }
 
-            let doMultiClick = this.is.multiSegmented && settings.buildingsUseMultiClick;
-            let amountToBuild = 1;
-            if (doMultiClick) {
+            // if (Object.keys(this.creep).length === 0 && Object.keys(this.base_creep).length > 0) {
+            if (Object.keys(this.base_creep).length > 0) {
+                // console.log("creep update", this.id)
+                this.updateCreep();
+            }
+
+            let amountToBuild = 1.0;
+            let doMultiClick = (this.is.multiSegmented || settings.buildingsBuildToFive) && settings.buildingsUseMultiClick;
+            let allowNegatives = settings.buildingsAllowNegativeBuild;
+
+            // cost creep is hardcoded at 1.5, because writing down all of them is tedious, and at the point where it becomes useful (150- days ascensions) - it does not matter
+            let doFiveBuildings = settings.buildingsBuildToFive;
+            // incompatible with multibuild, more than 1.5 creep for some of the resources or dangerous soul gems requirements
+            // TODO: split it to the incompatible list (hardcoded) and exception list (editable by user), as "ignored researches" do
+            let blacklistFive = ["lumber_yard", "graveyard", "mine", "amphitheatre", "geck", "test_launch", "moon_mission", "red_mission", "hell_mission", "sun_mission", "gas_mission", "gas_moon_mission",
+                                 "belt_mission", "dwarf_mission", "alpha_mission", "proxima_mission", "nebula_mission", "neutron_mission", "blackhole_mission", "wormhole_mission", "sirius_mission",
+                                 "gateway_mission", "gorddon_mission", "embassy", "consulate", "ascend", "ascension_trigger", "alien2_mission", "chthonian_mission", "pit_mission", "ruins_mission",
+                                 "vault", "ancient_pillars", "titan_mission", "enceladus_mission", "triton_mission", "kuiper_mission", "eris_mission", "home_mission", "red_mission", "roid_mission",
+                                "sirius_b", "assault_forge", "gate_mission", "lake_mission", "spire_mission", "spire_survey", "freighter",
+                                "asphodel_harvester", "research_station", "bliss_den", "rectory", "citadel", "war_drone"]
+            let costList = [1.0, 2.5, 4.75, 8.125, 13.1875]
+            let costMax = 100
+            let maxBuild = false
+            if (doMultiClick || doFiveBuildings) {
                 amountToBuild = this.gameMax - this.count;
                 for (let res in this.cost) {
-                    amountToBuild = Math.min(amountToBuild, Math.floor(resources[res].currentQuantity / this.cost[res]));
+                    if (this.cost[res] > 0) {
+                        // console.log(this.id, resources[res].currentQuantity, "/", this.cost[res], res, ", ratio:", resources[res].currentQuantity / this.cost[res]);
+                        amountToBuild = Math.min(amountToBuild, resources[res].currentQuantity / this.cost[res]);
+                    }
+                    else {
+                        // console.log(this.id, resources[res].currentQuantity, "/", this.cost[res], res, ", ratio:", 5);
+                        amountToBuild = Math.min(amountToBuild, 5);
+                    }
+                }
+                if (doFiveBuildings) {
+                    if (blacklistFive.includes(this.id)) {
+                        amountToBuild = 1
+                    }
+                    else {
+                        let resourceRatio = amountToBuild;
+                        for (const [index, ratio] of costList.entries()) {
+                            if (resourceRatio > ratio) {
+                                amountToBuild = index + 1
+                            }
+                        }
+                        if (resourceRatio > costMax) {
+                            maxBuild = true
+                        }
+                    }
                 }
                 if (amountToBuild < 1) { // Game allow to spend more resources than available, going negative. If we're here - building is clickable, and we can afford at least one thing for sure.
-                    amountToBuild = 1;
+                    if (allowNegatives) {
+                        amountToBuild = 1;
+                    }
+                    else { // no abusing mechanics for humans with soulless machines
+                        // console.log(this.id, "lack of resources");
+                        return false;
+                    }
                 }
+            }
+            amountToBuild = Math.min(Math.floor(amountToBuild), this.gameMax - this.count);
+            // care about autoMax too
+            amountToBuild = Math.min(amountToBuild, this.autoMax - this.count);
+            // console.log(this.id, amountToBuild);
+            if (game.global.race.species !== "protoplasm") {
+                //console.log(game.global.race["compact"], game.global.race["compact"].vars, traitVal("compact", 0), traitVal("compact", 1), traitVal("small", 0), traitVal("small", 1), traitVal("large", 0), traitVal("large", 1))
+                //console.log(this.id, amountToBuild, this.creep, this.base_creep, this.cost);
             }
 
             for (let res in this.cost) {
-                resources[res].currentQuantity -= this.cost[res] * amountToBuild;
+                if (doFiveBuildings) {
+                    resources[res].currentQuantity -= this.cost[res] * costList[amountToBuild - 1];
+                }
+                else {
+                    resources[res].currentQuantity -= this.cost[res] * amountToBuild;
+                }
             }
 
             // Don't log evolution actions and gathering actions
@@ -999,7 +1138,18 @@
                 }
             }
 
-            KeyManager.set(doMultiClick, doMultiClick, doMultiClick);
+            // KeyManager.set(doMultiClick, doMultiClick, doMultiClick);
+            if (this.is.multiSegmented || maxBuild === true) {
+                KeyManager.set(true, true, true);
+                amountToBuild = 1
+            }
+            else {
+                KeyManager.set(false, false, false);
+            }
+
+            if (game.global.race.species === "protoplasm") {
+                amountToBuild = 1
+            }
 
             if (this.is.prestige) { logPrestige(); }
 
@@ -1008,24 +1158,34 @@
             // This will greatly reduce the amount of page redraws.
             // refresh is really only needed for first building as there are no buildings where building a second unlocks more stuff.
             if (settings.performanceHackAvoidDrawTech && this.definition.refresh && this.count > 0) {
-                this.definition.action();
+                try {
+                    for (let i = 0; i < amountToBuild; i++) {
+                        this.definition.action();
+                    }
+                } catch (error) {
+                    console.error(error);
+                    console.log(this.id, amountToBuild);
+                }
                 return true;
             }
 
-            // Hide active popper from action, so it won't rewrite it
-            let popper = $('#popper');
-            if (popper.length > 0 && popper.data('id').indexOf(this._vueBinding) === -1) {
-                popper.attr('id', 'TotallyNotAPopper');
-
-                // Game bugs in .action() can cause an error to be thrown. We can't really handle it in any good way,
-                // but we need to revert the id or a tooltip might get stuck at the bottom of the page.
-                try {
-                    this.vue.action();
-                } finally {
+            try {
+                // Hide active popper from action, so it won't rewrite it
+                let popper = $('#popper');
+                if (popper.length > 0 && popper.data('id').indexOf(this._vueBinding) === -1) {
+                    popper.attr('id', 'TotallyNotAPopper');
+                    for (let i = 0; i < amountToBuild; i++) {
+                        this.vue.action();
+                    }
                     popper.attr('id', 'popper');
+                } else {
+                    for (let i = 0; i < amountToBuild; i++) {
+                        this.vue.action();
+                    }
                 }
-            } else {
-                this.vue.action();
+            } catch (error) {
+                console.error(error);
+                console.log(this.id, amountToBuild);
             }
 
             if (this.is.prestige) {
@@ -1034,6 +1194,7 @@
 
             return true;
         }
+
 
         addSupport(resource) {
             this.consumption.push(normalizeProperties({ resource: resource, rate: () => this.definition.support() * -1 }));
@@ -2380,7 +2541,7 @@
         ForgeHorseshoe: new ResourceAction("Horseshoe", "city", "horseshoe", "", "Horseshoe", {housing: true, garrison: true}),
         SlaveMarket: new ResourceAction("Slave Market", "city", "slave_market", "", "Slave"),
         SacrificialAltar: new Action("Sacrificial Altar", "city", "s_alter", ""),
-        House: new Action("Cabin", "city", "basic_housing", "", {housing: true}),
+        House: new Action("Cabin", "city", "basic_housing", "", {housing: true, base_creep: {"Money": 1.17, "Lumber": 1.23, "Stone": 1.23, "Chrysotile": 1.23}}),
         Cottage: new Action("Cottage", "city", "cottage", "", {housing: true}),
         Apartment: new Action("Apartment", "city", "apartment", "", {housing: true}),
         Lodge: new Action("Lodge", "city", "lodge", "", {housing: true}),
@@ -7541,6 +7702,8 @@
             buildingsTransportGem: false,
             buildingsBestFreighter: false,
             buildingsUseMultiClick: false,
+            buildingsBuildToFive: false,
+            buildingsAllowNegativeBuild: false,
             buildingEnabledAll: true,
             buildingStateAll: true
         }
@@ -18143,6 +18306,8 @@
         addSettingsToggle(currentNode, "buildingsTransportGem", "Build cheapest Supplies transport", "By default script chooses between Lake Transport and Lake Bireme Warship comparing their 'Supplies Per Support', with this option enabled it will compare 'Supplies Per Soulgems' instead.");
         addSettingsToggle(currentNode, "buildingsBestFreighter", "Build most efficient freighters", "With this option enabled script will compare 'Money Storage per Crew' of Freighter and Super Freighter, and only build the best one. Without this option no restrictions will be applied. Works only when both ships are buildable.");
         addSettingsToggle(currentNode, "buildingsUseMultiClick", "Bulk build multi-segmented buildings", "With this option enabled, the script will build as many segments as are affordable at once, instead of one per tick.");
+        addSettingsToggle(currentNode, "buildingsBuildToFive", "Try to build up to five buildings at once", "With this option enabled, the script will try to build up to five buildings at once if you have enough resources for it.");
+        addSettingsToggle(currentNode, "buildingsAllowNegativeBuild", "Allow purchases that send resources into negatives", "With this option enabled, the script would use standard ingame 'grace period' that allows you to buy a building one tick before you have resources for it, sending resources into negatives.");
         addSettingsNumber(currentNode, "buildingTowerSuppression", "Minimum suppression for Towers", "East Tower and West Tower won't be built until minimum suppression is reached");
 
         const consumptionOptions = [
