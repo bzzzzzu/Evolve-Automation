@@ -831,10 +831,10 @@
             this.cost = {};
             this.overridePowered = undefined;
 
+            this.is = normalizeProperties(flags) ?? {};
+
             this.base_creep = this.is.base_creep ? this.is.base_creep : {};
             this.creep = {};
-
-            this.is = normalizeProperties(flags) ?? {};
         }
 
         get autoBuildEnabled() { return settings['bat' + this._vueBinding] }
