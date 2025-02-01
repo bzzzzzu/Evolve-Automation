@@ -9781,15 +9781,17 @@
 
                 for (let productionCost of fuel.cost) {
                     let resource = productionCost.resource;
-                    // Allow using all resources for fuel until 60s of consumption left, unless demanded.
-                    if (resource.currentQuantity < ((maxAllowedUnits * productionCost.quantity) * CONSUMPTION_BALANCE_MIN + productionCost.minRateOfChange) || resource.isDemanded()) {
-                        let remainingRateOfChange = resource.rateOfChange + (m.fueledCount(fuel) * productionCost.quantity) - productionCost.minRateOfChange;
+                    // Allow using all resources for fuel until 60s of consumption left, unless demanded. Not applicable for Eden reset.
+                    if (settings.prestigeType !== "eden") {
+                        if (resource.currentQuantity < ((maxAllowedUnits * productionCost.quantity) * CONSUMPTION_BALANCE_MIN + productionCost.minRateOfChange) || resource.isDemanded()) {
+                            let remainingRateOfChange = resource.rateOfChange + (m.fueledCount(fuel) * productionCost.quantity) - productionCost.minRateOfChange;
 
-                        let affordableAmount = Math.max(0, Math.floor(remainingRateOfChange / productionCost.quantity));
-                        if (affordableAmount < maxAllowedUnits) {
-                            state.tooltips["smelterFuels" + fuel.id.toLowerCase()] = `Too low ${resource.name} income<br>`;
+                            let affordableAmount = Math.max(0, Math.floor(remainingRateOfChange / productionCost.quantity));
+                            if (affordableAmount < maxAllowedUnits) {
+                                state.tooltips["smelterFuels" + fuel.id.toLowerCase()] = `Too low ${resource.name} income<br>`;
+                            }
+                            maxAllowedUnits = Math.min(maxAllowedUnits, affordableAmount);
                         }
-                        maxAllowedUnits = Math.min(maxAllowedUnits, affordableAmount);
                     }
                 }
 
@@ -9844,15 +9846,17 @@
         let steelSmeltingConsumption = m.Productions.Steel.cost;
         for (let productionCost of steelSmeltingConsumption) {
             let resource = productionCost.resource;
-            // Allow using all resources for Steel until 60s of consumption left, unless demanded.
-            if (resource.currentQuantity < ((smelterSteelCount * productionCost.quantity) * CONSUMPTION_BALANCE_MIN + productionCost.minRateOfChange) || resource.isDemanded()) {
-                let remainingRateOfChange = resource.rateOfChange + (smelterSteelCount * productionCost.quantity) - productionCost.minRateOfChange;
+            // Allow using all resources for Steel until 60s of consumption left, unless demanded. Not applicable for Eden reset.
+            if (settings.prestigeType !== "eden") {
+                if (resource.currentQuantity < ((smelterSteelCount * productionCost.quantity) * CONSUMPTION_BALANCE_MIN + productionCost.minRateOfChange) || resource.isDemanded()) {
+                    let remainingRateOfChange = resource.rateOfChange + (smelterSteelCount * productionCost.quantity) - productionCost.minRateOfChange;
 
-                let affordableAmount = Math.max(0, Math.floor(remainingRateOfChange / productionCost.quantity));
-                if (affordableAmount < maxAllowedSteel) {
-                    state.tooltips["smelterMatssteel"] = `Too low ${resource.name} income<br>`;
+                    let affordableAmount = Math.max(0, Math.floor(remainingRateOfChange / productionCost.quantity));
+                    if (affordableAmount < maxAllowedSteel) {
+                        state.tooltips["smelterMatssteel"] = `Too low ${resource.name} income<br>`;
+                    }
+                    maxAllowedSteel = Math.min(maxAllowedSteel, affordableAmount);
                 }
-                maxAllowedSteel = Math.min(maxAllowedSteel, affordableAmount);
             }
         }
 
@@ -10175,7 +10179,7 @@
             let maxFueledForConsumption = remainingPlants;
             if (!resources.Graphene.isUseful()) {
                 maxFueledForConsumption = 0;
-            } else if (resource.currentQuantity < ((maxFueledForConsumption * fuel.cost.quantity * CONSUMPTION_BALANCE_MIN) + fuel.cost.minRateOfChange)) {
+            } else if (resource.currentQuantity < ((maxFueledForConsumption * fuel.cost.quantity * CONSUMPTION_BALANCE_MIN) + fuel.cost.minRateOfChange) && settings.prestigeType !== "eden") {
                 let rateOfChange = resource.rateOfChange + fuel.cost.quantity * currentFuelCount - fuel.cost.minRateOfChange;
 
                 let affordableAmount = Math.floor(rateOfChange / fuel.cost.quantity);
@@ -11717,7 +11721,10 @@
                         supportedAmount = Math.ceil(supportedAmount);
                     }
 
-                    maxStateOn = Math.min(maxStateOn, supportedAmount);
+                    // Lone Survivor generally wants consuming buildings run even without resource production, either via replicator or huge pile of initial resources
+                    if (settings.prestigeType !== "eden") {
+                        maxStateOn = Math.min(maxStateOn, supportedAmount);
+                    }
                 }
             }
 
