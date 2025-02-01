@@ -2794,7 +2794,7 @@
         ElysiumMine: new Action("Elysium Mine", "eden", "elysanite_mine", "eden_elysium"),
         ElysiumSacredSmelter: new Action("Elysium Sacred Smelter", "eden", "sacred_smelter", "eden_elysium"),
         ElysiumEleriumContainment: new Action("Elysium Elerium Containment", "eden", "elerium_containment", "eden_elysium"),
-        ElysiumPillbox: new Action("Elysium Pillbox", "eden", "pillbox", "eden_elysium"), // TODO: Need some interaction with autoHell
+        ElysiumPillbox: new Action("Elysium Pillbox", "eden", "pillbox", "eden_elysium"),
         ElysiumRestaurant: new Action("Elysium Restaurant", "eden", "restaurant", "eden_elysium"),
         ElysiumEternalBank: new Action("Elysium Eternal Bank", "eden", "eternal_bank", "eden_elysium"),
         ElysiumArchive: new Action("Elysium Archive", "eden", "archive", "eden_elysium"),
@@ -8832,6 +8832,11 @@
         let homeSoldiers = settings.hellHomeGarrison;
         if ((buildings.ElysiumFortress.isUnlocked() || buildings.ElysiumScout.isUnlocked()) && homeSoldiers < 100) {
             homeSoldiers = 100;
+        }
+        // Reserve soldiers for Pillboxes, as they are not considered ship crew and not pulled from hell automatically by game itself
+        if (buildings.ElysiumPillbox.stateOnCount > 0) {
+            // TODO: Check if high pop affects Pillbox soldier count, which seems not be the case from casual glance
+            homeSoldiers += (buildings.ElysiumPillbox.stateOnCount) * 10
         }
         // First handle not having enough soldiers, then handle patrols
         // Only go into hell at all if soldiers are close to full, or we are already there
